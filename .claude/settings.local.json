@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:docs.thetadata.us)",
+      "WebFetch(domain:spotgamma.com)",
+      "WebFetch(domain:medium.com)"
+    ]
+  }
+}

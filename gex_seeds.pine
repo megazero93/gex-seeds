@@ -1,0 +1,118 @@
+//@version=6
+// GEX Profile [Pine Seeds] — fully automated, zero manual input
+// Data is pushed to a GitHub repo via generate_gex.py + run_updater.sh
+// and read here via request.seed() — no copy-paste, no Tampermonkey.
+//
+// SETUP:
+//   1. Run generate_gex.py at least once to populate the data/ directory.
+//   2. Push the repo to GitHub and register it with TradingView Pine Seeds.
+//   3. Set the "Pine Seeds Repo" input to "yourusername/gex-seeds".
+//   4. Set "Symbol" to match what you passed to generate_gex.py (e.g. "SPY").
+indicator("GEX Profile [Pine Seeds]", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 10)
+
+// ─── Connection ────────────────────────────────────────────────────────────────
+g_conn = "Connection"
+repo   = input.string("yourusername/gex-seeds", "Pine Seeds Repo",      group = g_conn,
+         tooltip = "GitHub repo registered with TradingView Pine Seeds (owner/repo-name)")
+sym    = input.string("SPY",                    "Symbol (match Python)", group = g_conn,
+         tooltip = "Must exactly match the symbol used in generate_gex.py")
+
+// ─── Visual Settings ───────────────────────────────────────────────────────────
+g_vis   = "Visual Settings"
+c_call  = input.color(color.new(#00ffbb, 30), "Positive GEX color", group = g_vis)
+c_put   = input.color(color.new(#ff4400, 30), "Negative GEX color", group = g_vis)
+p_width = input.int(100,  "Max profile width (bars)", minval = 10, maxval = 300, group = g_vis)
+p_off   = input.int(15,   "Horizontal offset (bars)",  minval = 0,               group = g_vis)
+bh_atr  = input.float(0.4, "Bar height (× ATR)",       minval = 0.05,            group = g_vis)
+show_lbl = input.bool(true, "Show level labels",                                  group = g_vis)
+
+// ─── Key Level Data ────────────────────────────────────────────────────────────
+// 3 request.seed() calls
+flip      = request.seed(repo, sym + "_GEX_FLIP")
+call_wall = request.seed(repo, sym + "_GEX_CALLWALL")
+put_wall  = request.seed(repo, sym + "_GEX_PUTWALL")
+
+// ─── Histogram Data (top 15 GEX levels) ───────────────────────────────────────
+// 30 request.seed() calls — total across all: 33, within Pine Script's 40-call limit
+s01 = request.seed(repo, sym + "_STRIKE_01")
+s02 = request.seed(repo, sym + "_STRIKE_02")
+s03 = request.seed(repo, sym + "_STRIKE_03")
+s04 = request.seed(repo, sym + "_STRIKE_04")
+s05 = request.seed(repo, sym + "_STRIKE_05")
+s06 = request.seed(repo, sym + "_STRIKE_06")
+s07 = request.seed(repo, sym + "_STRIKE_07")
+s08 = request.seed(repo, sym + "_STRIKE_08")
+s09 = request.seed(repo, sym + "_STRIKE_09")
+s10 = request.seed(repo, sym + "_STRIKE_10")
+s11 = request.seed(repo, sym + "_STRIKE_11")
+s12 = request.seed(repo, sym + "_STRIKE_12")
+s13 = request.seed(repo, sym + "_STRIKE_13")
+s14 = request.seed(repo, sym + "_STRIKE_14")
+s15 = request.seed(repo, sym + "_STRIKE_15")
+
+v01 = request.seed(repo, sym + "_GEX_VAL_01")
+v02 = request.seed(repo, sym + "_GEX_VAL_02")
+v03 = request.seed(repo, sym + "_GEX_VAL_03")
+v04 = request.seed(repo, sym + "_GEX_VAL_04")
+v05 = request.seed(repo, sym + "_GEX_VAL_05")
+v06 = request.seed(repo, sym + "_GEX_VAL_06")
+v07 = request.seed(repo, sym + "_GEX_VAL_07")
+v08 = request.seed(repo, sym + "_GEX_VAL_08")
+v09 = request.seed(repo, sym + "_GEX_VAL_09")
+v10 = request.seed(repo, sym + "_GEX_VAL_10")
+v11 = request.seed(repo, sym + "_GEX_VAL_11")
+v12 = request.seed(repo, sym + "_GEX_VAL_12")
+v13 = request.seed(repo, sym + "_GEX_VAL_13")
+v14 = request.seed(repo, sym + "_GEX_VAL_14")
+v15 = request.seed(repo, sym + "_GEX_VAL_15")
+
+// ─── Drawing Functions ─────────────────────────────────────────────────────────
+atr = ta.atr(14)
+h   = atr * bh_atr / 2
+
+f_bar(strike, gex, max_v) =>
+    if not na(strike) and strike != 0.0 and not na(gex) and gex != 0.0 and max_v > 0.0
+        w   = math.round(math.abs(gex) / max_v * p_width)
+        col = gex > 0.0 ? c_call : c_put
+        box.new(bar_index + p_off, strike + h,
+                bar_index + p_off + w, strike - h,
+                bgcolor = col, border_color = color.new(col, 80))
+
+f_key(price, txt, col) =>
+    if not na(price) and price != 0.0
+        line.new(bar_index, price, bar_index + p_off + p_width, price,
+                 color = col, width = 2, style = line.style_dotted,
+                 extend = extend.right)
+        if show_lbl
+            label.new(bar_index + p_off + p_width, price,
+                      txt + "  " + str.tostring(price, "#.##"),
+                      style = label.style_label_left,
+                      color = col, textcolor = color.white, size = size.small)
+
+// ─── Render on the Last Bar ────────────────────────────────────────────────────
+if barstate.islast
+    // Normalize bar widths against the largest absolute GEX value in the set
+    max_v = math.max(0.0001,
+        math.abs(v01), math.abs(v02), math.abs(v03), math.abs(v04), math.abs(v05),
+        math.abs(v06), math.abs(v07), math.abs(v08), math.abs(v09), math.abs(v10),
+        math.abs(v11), math.abs(v12), math.abs(v13), math.abs(v14), math.abs(v15))
+
+    f_bar(s01, v01, max_v)
+    f_bar(s02, v02, max_v)
+    f_bar(s03, v03, max_v)
+    f_bar(s04, v04, max_v)
+    f_bar(s05, v05, max_v)
+    f_bar(s06, v06, max_v)
+    f_bar(s07, v07, max_v)
+    f_bar(s08, v08, max_v)
+    f_bar(s09, v09, max_v)
+    f_bar(s10, v10, max_v)
+    f_bar(s11, v11, max_v)
+    f_bar(s12, v12, max_v)
+    f_bar(s13, v13, max_v)
+    f_bar(s14, v14, max_v)
+    f_bar(s15, v15, max_v)
+
+    f_key(flip,      "Gamma Flip", color.gray)
+    f_key(call_wall, "Call Wall",  #00ffbb)
+    f_key(put_wall,  "Put Wall",   #ff4400)
