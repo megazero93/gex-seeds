@@ -5,9 +5,15 @@
     "status": "active"
   },
   "symbols": [
-    { "id": "SPY_GEX_FLIP",     "name": "SPY GEX Flip Level",     "description": "Gamma zero-crossing / flip level price" },
-    { "id": "SPY_GEX_CALLWALL", "name": "SPY Call Wall",           "description": "Strike with maximum positive GEX" },
-    { "id": "SPY_GEX_PUTWALL",  "name": "SPY Put Wall",            "description": "Strike with maximum negative GEX" },
+    { "id": "SPY_GEX_FLIP",        "name": "SPY GEX Flip Level",          "description": "Gamma zero-crossing / flip level price" },
+    { "id": "SPY_GEX_CALLWALL",   "name": "SPY Call Wall (Primary)",     "description": "Strike with highest positive GEX" },
+    { "id": "SPY_GEX_CALLWALL_02","name": "SPY Call Wall (Secondary)",   "description": "Strike with 2nd highest positive GEX" },
+    { "id": "SPY_GEX_CALLWALL_03","name": "SPY Call Wall (Tertiary)",    "description": "Strike with 3rd highest positive GEX" },
+    { "id": "SPY_GEX_PUTWALL",    "name": "SPY Put Wall (Primary)",      "description": "Strike with most negative GEX" },
+    { "id": "SPY_GEX_PUTWALL_02", "name": "SPY Put Wall (Secondary)",    "description": "Strike with 2nd most negative GEX" },
+    { "id": "SPY_GEX_PUTWALL_03", "name": "SPY Put Wall (Tertiary)",     "description": "Strike with 3rd most negative GEX" },
+    { "id": "SPY_GEX_NET_TOTAL",  "name": "SPY Net GEX (scalar)",        "description": "Sum of signed GEX across all strikes; positive = price-dampening regime" },
+    { "id": "SPY_VEX_NET_TOTAL",  "name": "SPY Net VEX (scalar)",        "description": "Sum of vanna exposure; positive = dealer buy pressure when IV drops" },
     { "id": "SPY_STRIKE_01",    "name": "SPY GEX Level 01 Strike", "description": "Strike price of top GEX level 1" },
     { "id": "SPY_STRIKE_02",    "name": "SPY GEX Level 02 Strike", "description": "Strike price of top GEX level 2" },
     { "id": "SPY_STRIKE_03",    "name": "SPY GEX Level 03 Strike", "description": "Strike price of top GEX level 3" },

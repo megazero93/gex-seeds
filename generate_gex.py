@@ -6,17 +6,23 @@ Fetches options greeks + open interest from ThetaData Terminal (must be running
 on localhost:25503) and writes OHLCV CSV files to data/ for TradingView Pine Seeds.
 
 Each CSV represents one data series read via request.seed() in Pine Script.
-Exports: 3 key levels + 15 ranked GEX levels = 33 seed symbols per ticker.
+Exports per ticker (39 seed symbols, within Pine Script's 40-call limit):
+  - 1 flip level
+  - 3 call walls + 3 put walls (primary + 2 secondary each)
+  - 2 net scalars: GEX_NET_TOTAL, VEX_NET_TOTAL
+  - 15 histogram strikes + 15 histogram GEX values
 
 Usage:
     python generate_gex.py                  # updates DEFAULT_SYMS
     python generate_gex.py SPY QQQ SPX      # override symbols via CLI
+    python generate_gex.py SPY --exps 6     # use 6 nearest expirations
 """
 
 import asyncio
 import csv
 import datetime
 import logging
+import math
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -27,9 +33,9 @@ import httpx
 BASE_URL      = "http://127.0.0.1:25503/v3"
 DATA_DIR      = Path(__file__).parent / "data"
 TOP_N         = 15    # GEX levels to export — keeps request.seed() calls ≤ 40 in Pine Script
-NUM_EXPS      = 4     # Nearest expirations to aggregate
+NUM_EXPS      = 4     # Nearest expirations to aggregate (4 captures all meaningful near-term gamma)
 STRIKE_RANGE  = 0.10  # ±10 % from spot
-DEFAULT_SYMS  = ["SPY"]
+DEFAULT_SYMS  = ["SPY", "QQQ"]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -243,6 +249,43 @@ def _find_flip(strikes_sorted: List[Tuple[float, float]], spot: float) -> float:
     return min(strikes_sorted, key=lambda x: abs(x[0] - spot))[0]
 
 
+def _compute_vanna(item: dict, spot: float, exp_date: datetime.date) -> Optional[float]:
+    """
+    Extract vanna from ThetaData if present; otherwise derive from Black-Scholes.
+
+    vanna = ∂²V/∂S∂σ = -N'(d1) × d2 / σ
+
+    Positive vanna (OTM calls): as IV rises, delta increases toward 0.5.
+    Negative vanna (OTM puts):  as IV rises, delta decreases toward -0.5.
+
+    Dealers are net short options, so their aggregate vanna is the negative of the
+    open-interest-weighted sum computed here (buyer perspective).
+    """
+    # Try direct extraction first — ThetaData may return it in the greeks snapshot
+    raw = item.get("vanna")
+    if raw is not None:
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            pass
+
+    # Fall back to Black-Scholes derivation using IV
+    try:
+        iv = float(item.get("iv") or item.get("implied_volatility") or 0)
+        if iv <= 0:
+            return None
+        K = float(item["strike"])
+        today = datetime.date.today()
+        T = max((exp_date - today).days / 365.0, 1 / 365.0)  # floor at 1 day for 0DTE
+        r = 0.05  # approximate risk-free rate
+        d1 = (math.log(spot / K) + (r + iv ** 2 / 2) * T) / (iv * math.sqrt(T))
+        d2 = d1 - iv * math.sqrt(T)
+        n_prime_d1 = math.exp(-d1 ** 2 / 2) / math.sqrt(2 * math.pi)
+        return -n_prime_d1 * d2 / iv
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
 # ─── GEX Calculation ───────────────────────────────────────────────────────────
 
 async def build_gex_profile(client: ThetaClient, sym: str) -> Optional[Dict]:
@@ -284,6 +327,7 @@ async def build_gex_profile(client: ThetaClient, sym: str) -> Optional[Dict]:
     log.info("[%s] Spot = %.2f", sym, spot)
 
     gex_by_strike: Dict[float, float] = {}
+    vex_by_strike: Dict[float, float] = {}
 
     for exp in future:
         log.info("[%s]   Processing %s...", sym, exp)
@@ -294,12 +338,18 @@ async def build_gex_profile(client: ThetaClient, sym: str) -> Optional[Dict]:
             log.warning("[%s]   Skipping %s: missing greeks or OI", sym, exp)
             continue
 
-        # (strike, right) → gamma
+        exp_date = datetime.datetime.strptime(exp, "%Y%m%d").date()
+
+        # (strike, right) → gamma and vanna, parsed in a single pass
         gamma_map: Dict[Tuple, float] = {}
+        vanna_map: Dict[Tuple, float] = {}
         for item in greeks_raw:
             try:
                 key = (float(item["strike"]), _right(item["right"]))
                 gamma_map[key] = float(item.get("gamma") or 0)
+                v = _compute_vanna(item, spot, exp_date)
+                if v is not None:
+                    vanna_map[key] = v
             except (KeyError, TypeError, ValueError):
                 continue
 
@@ -321,25 +371,52 @@ async def build_gex_profile(client: ThetaClient, sym: str) -> Optional[Dict]:
             oi = oi_map.get((strike, right), 0.0)
             if oi == 0:
                 continue
+
+            # GEX: gamma × OI × 100 × spot; puts negate (dealer sells into weakness)
             gex = gamma * oi * 100 * spot
             if right == "P":
                 gex = -gex
             gex_by_strike[strike] = gex_by_strike.get(strike, 0.0) + gex
 
+            # VEX: vanna × OI × 100 (buyer perspective; sign comes from BS formula)
+            vanna = vanna_map.get((strike, right))
+            if vanna is not None:
+                vex_by_strike[strike] = vex_by_strike.get(strike, 0.0) + vanna * oi * 100
+
     if not gex_by_strike:
         log.error("[%s] No GEX data computed across all expirations", sym)
         return None
 
-    strikes_sorted = sorted(gex_by_strike.items())
+    strikes_sorted  = sorted(gex_by_strike.items())
+    total_abs_gex   = sum(abs(v) for v in gex_by_strike.values()) or 1.0
+
+    def _sig(gex: float) -> float:
+        return abs(gex) / total_abs_gex * 100
+
+    # Top 3 call walls (highest positive GEX) and put walls (most negative GEX)
+    pos_sorted  = sorted([(s, g) for s, g in gex_by_strike.items() if g > 0],
+                         key=lambda x: x[1], reverse=True)
+    neg_sorted  = sorted([(s, g) for s, g in gex_by_strike.items() if g < 0],
+                         key=lambda x: x[1])
+    call_walls  = [(s, g, _sig(g)) for s, g in pos_sorted[:3]]
+    put_walls   = [(s, g, _sig(g)) for s, g in neg_sorted[:3]]
 
     return {
-        "sym":        sym,
-        "spot":       spot,
-        "flip":       _find_flip(strikes_sorted, spot),
-        "call_wall":  max(gex_by_strike, key=gex_by_strike.get),
-        "put_wall":   min(gex_by_strike, key=gex_by_strike.get),
-        # Top N strikes by absolute GEX — these become the histogram bars in Pine Script
-        "top_levels": sorted(
+        "sym":           sym,
+        "spot":          spot,
+        "flip":          _find_flip(strikes_sorted, spot),
+        # Primary walls (scalar) kept for backward compat
+        "call_wall":     call_walls[0][0] if call_walls else 0.0,
+        "put_wall":      put_walls[0][0]  if put_walls  else 0.0,
+        # Top-3 walls with significance — [(strike, gex, sig_pct), ...]
+        "call_walls":    call_walls,
+        "put_walls":     put_walls,
+        "total_abs_gex": total_abs_gex,
+        # Regime scalars
+        "total_net_gex": sum(gex_by_strike.values()),
+        "total_net_vex": sum(vex_by_strike.values()),
+        # Top N strikes by absolute GEX — histogram bars in Pine Script
+        "top_levels":    sorted(
             gex_by_strike.items(), key=lambda x: abs(x[1]), reverse=True
         )[:TOP_N],
     }
@@ -351,10 +428,24 @@ def write_seed_files(result: Dict) -> None:
     sym    = result["sym"]
     levels = result["top_levels"]   # [(strike, gex), ...]
 
-    # Key levels — each stored as close value
-    _write_csv(DATA_DIR / f"{sym}_GEX_FLIP.csv",     result["flip"])
-    _write_csv(DATA_DIR / f"{sym}_GEX_CALLWALL.csv",  result["call_wall"])
-    _write_csv(DATA_DIR / f"{sym}_GEX_PUTWALL.csv",   result["put_wall"])
+    # Primary key levels
+    _write_csv(DATA_DIR / f"{sym}_GEX_FLIP.csv",       result["flip"])
+    _write_csv(DATA_DIR / f"{sym}_GEX_CALLWALL.csv",   result["call_wall"])
+    _write_csv(DATA_DIR / f"{sym}_GEX_PUTWALL.csv",    result["put_wall"])
+
+    # Regime scalars
+    _write_csv(DATA_DIR / f"{sym}_GEX_NET_TOTAL.csv",  result["total_net_gex"])
+    _write_csv(DATA_DIR / f"{sym}_VEX_NET_TOTAL.csv",  result["total_net_vex"])
+
+    # Secondary and tertiary call/put walls
+    for walls, prefix in (
+        (result["call_walls"], "GEX_CALLWALL"),
+        (result["put_walls"],  "GEX_PUTWALL"),
+    ):
+        for idx in (2, 3):
+            entry  = walls[idx - 1] if len(walls) >= idx else None
+            strike = entry[0] if entry else 0.0
+            _write_csv(DATA_DIR / f"{sym}_{prefix}_{idx:02d}.csv", strike)
 
     # Ranked histogram bars — strike price and GEX value stored as separate series
     for i in range(TOP_N):
@@ -363,28 +454,85 @@ def write_seed_files(result: Dict) -> None:
         _write_csv(DATA_DIR / f"{sym}_STRIKE_{idx:02d}.csv",  strike)
         _write_csv(DATA_DIR / f"{sym}_GEX_VAL_{idx:02d}.csv", gex)
 
-    total_files = 3 + TOP_N * 2
+    total_files = 3 + 2 + 4 + TOP_N * 2   # flip/walls + net scalars + secondary walls + histogram
     log.info("[%s] Wrote %d seed CSV files to %s/", sym, total_files, DATA_DIR)
+
+
+# ─── Summary ───────────────────────────────────────────────────────────────────
+
+def _print_summary(results: List[Dict]) -> None:
+    sep  = "═" * 62
+    div  = "─" * 62
+    now  = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    lines = [sep, f"  GEX SUMMARY — {now}", sep]
+
+    for i, r in enumerate(results):
+        if i:
+            lines.append(div)
+        spot       = r["spot"]
+        flip       = r["flip"]
+        flip_dist  = (flip - spot) / spot * 100
+
+        lines.append(f"  {r['sym']}  spot={spot:.2f}  flip={flip:.2f} ({flip_dist:+.2f}% from spot)")
+
+        def _wall_str(walls: list) -> str:
+            parts = []
+            for strike, _gex, sig in walls:
+                parts.append(f"{strike:.1f} ({sig:.0f}%)")
+            return "  ".join(parts) if parts else "—"
+
+        lines.append(f"    Call Walls:  {_wall_str(r['call_walls'])}")
+        lines.append(f"    Put  Walls:  {_wall_str(r['put_walls'])}")
+
+        gex_pos = r["total_net_gex"] >= 0
+        vex_pos = r["total_net_vex"] >= 0
+        lines.append(
+            f"    Net GEX:     {'POSITIVE — price-dampening' if gex_pos else 'NEGATIVE — price-amplifying'}"
+            f"  ({r['total_net_gex']:.3e})"
+        )
+        lines.append(
+            f"    Net VEX:     {'IV↓ → dealer BUY pressure' if vex_pos else 'IV↓ → dealer SELL pressure'}"
+            f"  ({r['total_net_vex']:.3e})"
+        )
+
+    lines.append(sep)
+    for line in lines:
+        log.info(line)
 
 
 # ─── Entry Point ───────────────────────────────────────────────────────────────
 
+async def process_sym(client: ThetaClient, sym: str) -> Optional[Dict]:
+    result = await build_gex_profile(client, sym)
+    if result:
+        write_seed_files(result)
+        log.info(
+            "[%s] Complete — spot=%.2f flip=%.2f call_wall=%.2f put_wall=%.2f",
+            result["sym"], result["spot"],
+            result["flip"], result["call_wall"], result["put_wall"],
+        )
+    return result
+
+
 async def main(symbols: List[str]) -> None:
     client = ThetaClient()
     try:
-        for sym in symbols:
-            result = await build_gex_profile(client, sym)
-            if result:
-                write_seed_files(result)
-                log.info(
-                    "[%s] Complete — spot=%.2f flip=%.2f call_wall=%.2f put_wall=%.2f",
-                    result["sym"], result["spot"],
-                    result["flip"], result["call_wall"], result["put_wall"],
-                )
+        results = await asyncio.gather(*[process_sym(client, sym) for sym in symbols])
+        completed = [r for r in results if r]
+        if completed:
+            _print_summary(completed)
     finally:
         await client.close()
 
 
 if __name__ == "__main__":
-    syms = [s.upper() for s in sys.argv[1:]] if len(sys.argv) > 1 else DEFAULT_SYMS
+    import argparse
+    parser = argparse.ArgumentParser(description="GEX Profile Pine Seeds Generator")
+    parser.add_argument("symbols", nargs="*", help="Symbols to process (default: DEFAULT_SYMS)")
+    parser.add_argument("--exps", type=int, default=NUM_EXPS,
+                        help=f"Number of nearest expirations to aggregate (default: {NUM_EXPS})")
+    args = parser.parse_args()
+
+    syms = [s.upper() for s in args.symbols] if args.symbols else DEFAULT_SYMS
+    NUM_EXPS = args.exps
     asyncio.run(main(syms))

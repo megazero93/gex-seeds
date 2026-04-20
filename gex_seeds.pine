@@ -27,13 +27,22 @@ bh_atr  = input.float(0.4, "Bar height (× ATR)",       minval = 0.05,          
 show_lbl = input.bool(true, "Show level labels",                                  group = g_vis)
 
 // ─── Key Level Data ────────────────────────────────────────────────────────────
-// 3 request.seed() calls
-flip      = request.seed(repo, sym + "_GEX_FLIP")
-call_wall = request.seed(repo, sym + "_GEX_CALLWALL")
-put_wall  = request.seed(repo, sym + "_GEX_PUTWALL")
+// 7 request.seed() calls (3 primary + 4 secondary walls)
+flip        = request.seed(repo, sym + "_GEX_FLIP")
+call_wall   = request.seed(repo, sym + "_GEX_CALLWALL")
+call_wall_2 = request.seed(repo, sym + "_GEX_CALLWALL_02")
+call_wall_3 = request.seed(repo, sym + "_GEX_CALLWALL_03")
+put_wall    = request.seed(repo, sym + "_GEX_PUTWALL")
+put_wall_2  = request.seed(repo, sym + "_GEX_PUTWALL_02")
+put_wall_3  = request.seed(repo, sym + "_GEX_PUTWALL_03")
+
+// ─── Regime Scalars ───────────────────────────────────────────────────────────
+// 2 request.seed() calls — total across all: 39, within Pine Script's 40-call limit
+gex_net = request.seed(repo, sym + "_GEX_NET_TOTAL")
+vex_net = request.seed(repo, sym + "_VEX_NET_TOTAL")
 
 // ─── Histogram Data (top 15 GEX levels) ───────────────────────────────────────
-// 30 request.seed() calls — total across all: 33, within Pine Script's 40-call limit
+// 30 request.seed() calls
 s01 = request.seed(repo, sym + "_STRIKE_01")
 s02 = request.seed(repo, sym + "_STRIKE_02")
 s03 = request.seed(repo, sym + "_STRIKE_03")
@@ -89,6 +98,21 @@ f_key(price, txt, col) =>
                       style = label.style_label_left,
                       color = col, textcolor = color.white, size = size.small)
 
+// Secondary walls: dashed, thinner, no label — visual context without clutter
+f_wall2(price, col) =>
+    if not na(price) and price != 0.0
+        line.new(bar_index, price, bar_index + p_off + p_width, price,
+                 color = color.new(col, 50), width = 1, style = line.style_dashed,
+                 extend = extend.right)
+
+// ─── Regime Table (top-right corner) ──────────────────────────────────────────
+// Net GEX: positive = price-dampening regime; negative = price-amplifying
+// Net VEX: positive = dealer buy pressure when IV drops; negative = sell pressure
+var tbl = table.new(position.top_right, 2, 3,
+         bgcolor      = color.new(color.black, 65),
+         border_color = color.new(color.gray, 60), border_width = 1,
+         frame_color  = color.new(color.gray, 60), frame_width  = 1)
+
 // ─── Render on the Last Bar ────────────────────────────────────────────────────
 if barstate.islast
     // Normalize bar widths against the largest absolute GEX value in the set
@@ -113,6 +137,27 @@ if barstate.islast
     f_bar(s14, v14, max_v)
     f_bar(s15, v15, max_v)
 
-    f_key(flip,      "Gamma Flip", color.gray)
-    f_key(call_wall, "Call Wall",  #00ffbb)
-    f_key(put_wall,  "Put Wall",   #ff4400)
+    f_key(flip,      "Gamma Flip",    color.gray)
+    f_key(call_wall, "Call Wall",    #00ffbb)
+    f_key(put_wall,  "Put Wall",     #ff4400)
+    f_wall2(call_wall_2, #00ffbb)
+    f_wall2(call_wall_3, #00ffbb)
+    f_wall2(put_wall_2,  #ff4400)
+    f_wall2(put_wall_3,  #ff4400)
+
+    // Regime table — only render when data is available
+    if not na(gex_net) and not na(vex_net)
+        gex_bull = gex_net >= 0
+        vex_bull = vex_net >= 0
+        table.cell(tbl, 0, 0, "Net GEX",
+                   text_color = color.new(color.white, 40), text_size = size.small)
+        table.cell(tbl, 1, 0, gex_bull ? "▲ POS" : "▼ NEG",
+                   text_color = gex_bull ? #00ffbb : #ff4400, text_size = size.small)
+        table.cell(tbl, 0, 1, "Net VEX",
+                   text_color = color.new(color.white, 40), text_size = size.small)
+        table.cell(tbl, 1, 1, vex_bull ? "↑ IV↓→BUY" : "↓ IV↓→SELL",
+                   text_color = vex_bull ? #00ffbb : #ff4400, text_size = size.small)
+        table.cell(tbl, 0, 2, sym,
+                   text_color = color.new(color.white, 60), text_size = size.tiny)
+        table.cell(tbl, 1, 2, "",
+                   text_color = color.white, text_size = size.tiny)
