@@ -18,71 +18,73 @@ sym    = input.string("SPY",                    "Symbol (match Python)", group =
          tooltip = "Must exactly match the symbol used in generate_gex.py")
 
 // ─── Visual Settings ───────────────────────────────────────────────────────────
-g_vis   = "Visual Settings"
-c_call  = input.color(color.new(#00ffbb, 30), "Positive GEX color", group = g_vis)
-c_put   = input.color(color.new(#ff4400, 30), "Negative GEX color", group = g_vis)
-p_width = input.int(100,  "Max profile width (bars)", minval = 10, maxval = 300, group = g_vis)
-p_off   = input.int(15,   "Horizontal offset (bars)",  minval = 0,               group = g_vis)
-bh_atr  = input.float(0.4, "Bar height (× ATR)",       minval = 0.05,            group = g_vis)
-show_lbl = input.bool(true, "Show level labels",                                  group = g_vis)
+g_vis    = "Visual Settings"
+c_call   = input.color(color.new(#00ffbb, 30), "Positive GEX color",  group = g_vis)
+c_put    = input.color(color.new(#ff4400, 30), "Negative GEX color",  group = g_vis)
+c_vex    = input.color(color.new(#aa66ff, 40), "VEX bar color",        group = g_vis)
+p_width  = input.int(100,  "Max profile width (bars)", minval = 10, maxval = 300, group = g_vis)
+p_off    = input.int(15,   "Horizontal offset (bars)",  minval = 0,               group = g_vis)
+bh_atr   = input.float(0.4, "Bar height (× ATR)",       minval = 0.05,            group = g_vis)
+show_lbl = input.bool(true, "Show level labels",                                   group = g_vis)
 
-// ─── Key Level Data ────────────────────────────────────────────────────────────
-// 7 request.seed() calls (3 primary + 4 secondary walls)
-flip        = request.seed(repo, sym + "_GEX_FLIP")
-call_wall   = request.seed(repo, sym + "_GEX_CALLWALL")
-call_wall_2 = request.seed(repo, sym + "_GEX_CALLWALL_02")
-call_wall_3 = request.seed(repo, sym + "_GEX_CALLWALL_03")
-put_wall    = request.seed(repo, sym + "_GEX_PUTWALL")
-put_wall_2  = request.seed(repo, sym + "_GEX_PUTWALL_02")
-put_wall_3  = request.seed(repo, sym + "_GEX_PUTWALL_03")
+// ─── Key Level Data (7 calls) ──────────────────────────────────────────────────
+flip        = request.seed(repo, sym + "_GEX_FLIP",        close, ignore_invalid_symbol = true)
+call_wall   = request.seed(repo, sym + "_GEX_CALLWALL",    close, ignore_invalid_symbol = true)
+call_wall_2 = request.seed(repo, sym + "_GEX_CALLWALL_02", close, ignore_invalid_symbol = true)
+call_wall_3 = request.seed(repo, sym + "_GEX_CALLWALL_03", close, ignore_invalid_symbol = true)
+put_wall    = request.seed(repo, sym + "_GEX_PUTWALL",     close, ignore_invalid_symbol = true)
+put_wall_2  = request.seed(repo, sym + "_GEX_PUTWALL_02",  close, ignore_invalid_symbol = true)
+put_wall_3  = request.seed(repo, sym + "_GEX_PUTWALL_03",  close, ignore_invalid_symbol = true)
 
-// ─── Regime Scalars ───────────────────────────────────────────────────────────
-// 2 request.seed() calls — total across all: 39, within Pine Script's 40-call limit
-gex_net = request.seed(repo, sym + "_GEX_NET_TOTAL")
-vex_net = request.seed(repo, sym + "_VEX_NET_TOTAL")
+// ─── Regime Scalars (3 calls) ─────────────────────────────────────────────────
+gex_net   = request.seed(repo, sym + "_GEX_NET_TOTAL",   close, ignore_invalid_symbol = true)
+vex_net   = request.seed(repo, sym + "_VEX_NET_TOTAL",   close, ignore_invalid_symbol = true)
+charm_net = request.seed(repo, sym + "_CHARM_NET_TOTAL", close, ignore_invalid_symbol = true)
 
-// ─── Histogram Data (top 15 GEX levels) ───────────────────────────────────────
-// 30 request.seed() calls
-s01 = request.seed(repo, sym + "_STRIKE_01")
-s02 = request.seed(repo, sym + "_STRIKE_02")
-s03 = request.seed(repo, sym + "_STRIKE_03")
-s04 = request.seed(repo, sym + "_STRIKE_04")
-s05 = request.seed(repo, sym + "_STRIKE_05")
-s06 = request.seed(repo, sym + "_STRIKE_06")
-s07 = request.seed(repo, sym + "_STRIKE_07")
-s08 = request.seed(repo, sym + "_STRIKE_08")
-s09 = request.seed(repo, sym + "_STRIKE_09")
-s10 = request.seed(repo, sym + "_STRIKE_10")
-s11 = request.seed(repo, sym + "_STRIKE_11")
-s12 = request.seed(repo, sym + "_STRIKE_12")
-s13 = request.seed(repo, sym + "_STRIKE_13")
-s14 = request.seed(repo, sym + "_STRIKE_14")
-s15 = request.seed(repo, sym + "_STRIKE_15")
+// ─── GEX Histogram — top 10 levels (20 calls) ─────────────────────────────────
+s01 = request.seed(repo, sym + "_STRIKE_01", close, ignore_invalid_symbol = true)
+s02 = request.seed(repo, sym + "_STRIKE_02", close, ignore_invalid_symbol = true)
+s03 = request.seed(repo, sym + "_STRIKE_03", close, ignore_invalid_symbol = true)
+s04 = request.seed(repo, sym + "_STRIKE_04", close, ignore_invalid_symbol = true)
+s05 = request.seed(repo, sym + "_STRIKE_05", close, ignore_invalid_symbol = true)
+s06 = request.seed(repo, sym + "_STRIKE_06", close, ignore_invalid_symbol = true)
+s07 = request.seed(repo, sym + "_STRIKE_07", close, ignore_invalid_symbol = true)
+s08 = request.seed(repo, sym + "_STRIKE_08", close, ignore_invalid_symbol = true)
+s09 = request.seed(repo, sym + "_STRIKE_09", close, ignore_invalid_symbol = true)
+s10 = request.seed(repo, sym + "_STRIKE_10", close, ignore_invalid_symbol = true)
 
-v01 = request.seed(repo, sym + "_GEX_VAL_01")
-v02 = request.seed(repo, sym + "_GEX_VAL_02")
-v03 = request.seed(repo, sym + "_GEX_VAL_03")
-v04 = request.seed(repo, sym + "_GEX_VAL_04")
-v05 = request.seed(repo, sym + "_GEX_VAL_05")
-v06 = request.seed(repo, sym + "_GEX_VAL_06")
-v07 = request.seed(repo, sym + "_GEX_VAL_07")
-v08 = request.seed(repo, sym + "_GEX_VAL_08")
-v09 = request.seed(repo, sym + "_GEX_VAL_09")
-v10 = request.seed(repo, sym + "_GEX_VAL_10")
-v11 = request.seed(repo, sym + "_GEX_VAL_11")
-v12 = request.seed(repo, sym + "_GEX_VAL_12")
-v13 = request.seed(repo, sym + "_GEX_VAL_13")
-v14 = request.seed(repo, sym + "_GEX_VAL_14")
-v15 = request.seed(repo, sym + "_GEX_VAL_15")
+v01 = request.seed(repo, sym + "_GEX_VAL_01", close, ignore_invalid_symbol = true)
+v02 = request.seed(repo, sym + "_GEX_VAL_02", close, ignore_invalid_symbol = true)
+v03 = request.seed(repo, sym + "_GEX_VAL_03", close, ignore_invalid_symbol = true)
+v04 = request.seed(repo, sym + "_GEX_VAL_04", close, ignore_invalid_symbol = true)
+v05 = request.seed(repo, sym + "_GEX_VAL_05", close, ignore_invalid_symbol = true)
+v06 = request.seed(repo, sym + "_GEX_VAL_06", close, ignore_invalid_symbol = true)
+v07 = request.seed(repo, sym + "_GEX_VAL_07", close, ignore_invalid_symbol = true)
+v08 = request.seed(repo, sym + "_GEX_VAL_08", close, ignore_invalid_symbol = true)
+v09 = request.seed(repo, sym + "_GEX_VAL_09", close, ignore_invalid_symbol = true)
+v10 = request.seed(repo, sym + "_GEX_VAL_10", close, ignore_invalid_symbol = true)
+
+// ─── VEX Histogram — top 5 Vanna Exposure levels (10 calls) ──────────────────
+// Total request.seed() calls: 7 + 3 + 20 + 10 = 40 (at Pine Script's limit)
+vs01 = request.seed(repo, sym + "_VEX_STRIKE_01", close, ignore_invalid_symbol = true)
+vs02 = request.seed(repo, sym + "_VEX_STRIKE_02", close, ignore_invalid_symbol = true)
+vs03 = request.seed(repo, sym + "_VEX_STRIKE_03", close, ignore_invalid_symbol = true)
+vs04 = request.seed(repo, sym + "_VEX_STRIKE_04", close, ignore_invalid_symbol = true)
+vs05 = request.seed(repo, sym + "_VEX_STRIKE_05", close, ignore_invalid_symbol = true)
+
+vv01 = request.seed(repo, sym + "_VEX_VAL_01", close, ignore_invalid_symbol = true)
+vv02 = request.seed(repo, sym + "_VEX_VAL_02", close, ignore_invalid_symbol = true)
+vv03 = request.seed(repo, sym + "_VEX_VAL_03", close, ignore_invalid_symbol = true)
+vv04 = request.seed(repo, sym + "_VEX_VAL_04", close, ignore_invalid_symbol = true)
+vv05 = request.seed(repo, sym + "_VEX_VAL_05", close, ignore_invalid_symbol = true)
 
 // ─── Drawing Functions ─────────────────────────────────────────────────────────
 atr = ta.atr(14)
 h   = atr * bh_atr / 2
 
-f_bar(strike, gex, max_v) =>
-    if not na(strike) and strike != 0.0 and not na(gex) and gex != 0.0 and max_v > 0.0
-        w   = math.round(math.abs(gex) / max_v * p_width)
-        col = gex > 0.0 ? c_call : c_put
+f_bar(strike, val, max_v, col) =>
+    if not na(strike) and strike != 0.0 and not na(val) and val != 0.0 and max_v > 0.0
+        w = math.round(math.abs(val) / max_v * p_width)
         box.new(bar_index + p_off, strike + h,
                 bar_index + p_off + w, strike - h,
                 bgcolor = col, border_color = color.new(col, 80))
@@ -106,40 +108,46 @@ f_wall2(price, col) =>
                  extend = extend.right)
 
 // ─── Regime Table (top-right corner) ──────────────────────────────────────────
-// Net GEX: positive = price-dampening regime; negative = price-amplifying
-// Net VEX: positive = dealer buy pressure when IV drops; negative = sell pressure
-var tbl = table.new(position.top_right, 2, 3,
+// Net GEX:   positive = price-dampening regime; negative = price-amplifying
+// Net VEX:   positive = dealer buy pressure when IV drops; negative = sell pressure
+// Net Charm: positive = dealer buy pressure from time decay; negative = sell pressure
+var tbl = table.new(position.top_right, 2, 4,
          bgcolor      = color.new(color.black, 65),
          border_color = color.new(color.gray, 60), border_width = 1,
          frame_color  = color.new(color.gray, 60), frame_width  = 1)
 
 // ─── Render on the Last Bar ────────────────────────────────────────────────────
 if barstate.islast
-    // Normalize bar widths against the largest absolute GEX value in the set
-    max_v = math.max(0.0001,
-        math.abs(v01), math.abs(v02), math.abs(v03), math.abs(v04), math.abs(v05),
-        math.abs(v06), math.abs(v07), math.abs(v08), math.abs(v09), math.abs(v10),
-        math.abs(v11), math.abs(v12), math.abs(v13), math.abs(v14), math.abs(v15))
+    // GEX histogram — normalize bars against largest absolute GEX value
+    max_gex = math.max(0.0001,
+        math.abs(nz(v01)), math.abs(nz(v02)), math.abs(nz(v03)), math.abs(nz(v04)), math.abs(nz(v05)),
+        math.abs(nz(v06)), math.abs(nz(v07)), math.abs(nz(v08)), math.abs(nz(v09)), math.abs(nz(v10)))
 
-    f_bar(s01, v01, max_v)
-    f_bar(s02, v02, max_v)
-    f_bar(s03, v03, max_v)
-    f_bar(s04, v04, max_v)
-    f_bar(s05, v05, max_v)
-    f_bar(s06, v06, max_v)
-    f_bar(s07, v07, max_v)
-    f_bar(s08, v08, max_v)
-    f_bar(s09, v09, max_v)
-    f_bar(s10, v10, max_v)
-    f_bar(s11, v11, max_v)
-    f_bar(s12, v12, max_v)
-    f_bar(s13, v13, max_v)
-    f_bar(s14, v14, max_v)
-    f_bar(s15, v15, max_v)
+    f_bar(s01, v01, max_gex, nz(v01) >= 0.0 ? c_call : c_put)
+    f_bar(s02, v02, max_gex, nz(v02) >= 0.0 ? c_call : c_put)
+    f_bar(s03, v03, max_gex, nz(v03) >= 0.0 ? c_call : c_put)
+    f_bar(s04, v04, max_gex, nz(v04) >= 0.0 ? c_call : c_put)
+    f_bar(s05, v05, max_gex, nz(v05) >= 0.0 ? c_call : c_put)
+    f_bar(s06, v06, max_gex, nz(v06) >= 0.0 ? c_call : c_put)
+    f_bar(s07, v07, max_gex, nz(v07) >= 0.0 ? c_call : c_put)
+    f_bar(s08, v08, max_gex, nz(v08) >= 0.0 ? c_call : c_put)
+    f_bar(s09, v09, max_gex, nz(v09) >= 0.0 ? c_call : c_put)
+    f_bar(s10, v10, max_gex, nz(v10) >= 0.0 ? c_call : c_put)
 
-    f_key(flip,      "Gamma Flip",    color.gray)
-    f_key(call_wall, "Call Wall",    #00ffbb)
-    f_key(put_wall,  "Put Wall",     #ff4400)
+    // VEX histogram — independently normalized; purple bars show vanna concentration
+    max_vex = math.max(0.0001,
+        math.abs(nz(vv01)), math.abs(nz(vv02)), math.abs(nz(vv03)),
+        math.abs(nz(vv04)), math.abs(nz(vv05)))
+
+    f_bar(vs01, vv01, max_vex, c_vex)
+    f_bar(vs02, vv02, max_vex, c_vex)
+    f_bar(vs03, vv03, max_vex, c_vex)
+    f_bar(vs04, vv04, max_vex, c_vex)
+    f_bar(vs05, vv05, max_vex, c_vex)
+
+    f_key(flip,      "Gamma Flip", color.gray)
+    f_key(call_wall, "Call Wall",  #00ffbb)
+    f_key(put_wall,  "Put Wall",   #ff4400)
     f_wall2(call_wall_2, #00ffbb)
     f_wall2(call_wall_3, #00ffbb)
     f_wall2(put_wall_2,  #ff4400)
@@ -147,8 +155,9 @@ if barstate.islast
 
     // Regime table — only render when data is available
     if not na(gex_net) and not na(vex_net)
-        gex_bull = gex_net >= 0
-        vex_bull = vex_net >= 0
+        gex_bull   = gex_net   >= 0
+        vex_bull   = vex_net   >= 0
+        charm_bull = not na(charm_net) and charm_net >= 0
         table.cell(tbl, 0, 0, "Net GEX",
                    text_color = color.new(color.white, 40), text_size = size.small)
         table.cell(tbl, 1, 0, gex_bull ? "▲ POS" : "▼ NEG",
@@ -157,7 +166,12 @@ if barstate.islast
                    text_color = color.new(color.white, 40), text_size = size.small)
         table.cell(tbl, 1, 1, vex_bull ? "↑ IV↓→BUY" : "↓ IV↓→SELL",
                    text_color = vex_bull ? #00ffbb : #ff4400, text_size = size.small)
-        table.cell(tbl, 0, 2, sym,
+        table.cell(tbl, 0, 2, "Net Charm",
+                   text_color = color.new(color.white, 40), text_size = size.small)
+        table.cell(tbl, 1, 2, na(charm_net) ? "—" : (charm_bull ? "↑ T→BUY" : "↓ T→SELL"),
+                   text_color = na(charm_net) ? color.gray : (charm_bull ? #00ffbb : #ff4400),
+                   text_size = size.small)
+        table.cell(tbl, 0, 3, sym,
                    text_color = color.new(color.white, 60), text_size = size.tiny)
-        table.cell(tbl, 1, 2, "",
+        table.cell(tbl, 1, 3, "",
                    text_color = color.white, text_size = size.tiny)

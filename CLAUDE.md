@@ -104,11 +104,11 @@ Each CSV has exactly one data row: `time, open, high, low, close, volume` where 
 
 - Calls contribute positive GEX, puts contribute negative GEX.
 - Aggregated across the nearest `NUM_EXPS` (4) expirations within `STRIKE_RANGE` (±10%) of spot.
-- Outputs: Gamma Flip level (zero-crossing interpolation), Call Wall (max GEX strike), Put Wall (min GEX strike), top 15 strikes by absolute GEX.
+- Outputs: Gamma Flip level (zero-crossing interpolation), Call Wall (max GEX strike), Put Wall (min GEX strike), top 10 GEX strikes, top 5 VEX (Vanna Exposure) strikes.
 
 ## Pine Script limits
 
-`request.seed()` is capped at 40 calls per script. The indicator uses 33 total (3 key levels + 15 strikes + 15 GEX values). `TOP_N = 15` in `generate_gex.py` is set to respect this limit — do not raise it above 18 without checking the Pine Script call count.
+`request.seed()` is capped at 40 calls per script. The indicator uses exactly 40: 7 key levels + 3 net scalars + 10 GEX strikes + 10 GEX values + 5 VEX strikes + 5 VEX values. `TOP_N = 10` and `VEX_TOP_N = 5` in `generate_gex.py` — do not increase without auditing the Pine Script call count first.
 
 ## Playwright tests
 
