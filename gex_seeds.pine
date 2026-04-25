@@ -118,6 +118,16 @@ var tbl = table.new(position.top_right, 2, 4,
 
 // ─── Render on the Last Bar ────────────────────────────────────────────────────
 if barstate.islast
+    // Debug: show seed status in bottom-left so you can confirm data is arriving
+    seed_status = na(call_wall) ? "SEED: na (not registered yet)" :
+                  call_wall == 0.0 ? "SEED: 0 (bad data)" :
+                  "SEED OK: " + str.tostring(call_wall, "#.##")
+    label.new(bar_index, low * 0.999, seed_status,
+              style = label.style_label_up,
+              color = na(call_wall) ? color.red : color.green,
+              textcolor = color.white, size = size.small)
+
+if barstate.islast
     // GEX histogram — normalize bars against largest absolute GEX value
     max_gex = math.max(0.0001,
         math.abs(nz(v01)), math.abs(nz(v02)), math.abs(nz(v03)), math.abs(nz(v04)), math.abs(nz(v05)),
